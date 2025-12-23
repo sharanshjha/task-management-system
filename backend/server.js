@@ -19,9 +19,8 @@ app.use(express.json());
 app.use(cors());
 
 // MongoDB Atlas connection string
-// Using separate database 'taskManagementDB' on existing cluster
-// This keeps it isolated from studentDB and other projects
-const MONGODB_URI = 'mongodb+srv://Sharansh:password69@cluster0.clwhtys.mongodb.net/taskManagementDB?retryWrites=true&w=majority';
+// Using environment variable in production, fallback to hardcoded for simplicity in local
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://Sharansh:password69@cluster0.clwhtys.mongodb.net/taskManagementDB?retryWrites=true&w=majority';
 
 // connecting to MongoDB database
 mongoose.connect(MONGODB_URI)
@@ -45,7 +44,7 @@ app.get('/', (req, res) => {
 });
 
 // setting port number
-const PORT = 5001;
+const PORT = process.env.PORT || 5001;
 
 // starting the server
 app.listen(PORT, () => {
