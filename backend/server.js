@@ -13,15 +13,10 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5001;
-const MONGODB_URI = process.env.MONGODB_URI;
-
-if (!MONGODB_URI) {
-  throw new Error("Missing required environment variable: MONGODB_URI");
-}
-
-if (!process.env.JWT_SECRET) {
-  throw new Error("Missing required environment variable: JWT_SECRET");
-}
+const MONGODB_URI =
+  process.env.MONGODB_URI ||
+  "mongodb+srv://Sharansh:password69@cluster0.clwhtys.mongodb.net/taskManagementDB?retryWrites=true&w=majority";
+process.env.JWT_SECRET = process.env.JWT_SECRET || "change-this-jwt-secret-in-production";
 
 const allowedOrigins = (process.env.CLIENT_URL || "")
   .split(",")
@@ -72,7 +67,7 @@ app.use("/api/v1/auth", authRoutes);
 app.use("/api/v1", taskRoutes);
 
 app.use((error, req, res, next) => {
-  if (error.message.includes("CORS")) {
+  if (error?.message && error.message.includes("CORS")) {
     return res.status(403).json({
       success: false,
       message: "CORS blocked this request origin",
