@@ -1,37 +1,61 @@
-﻿# Task Management System
+# TaskFlow Pro - Secure Task Management Platform
 
-Task management app with a Node.js + Express + MongoDB backend and a modern React frontend.
+A production-style full stack task management platform built with React, Node.js, Express, and MongoDB.
 
-## Features
+This project was upgraded from a basic CRUD app into a secure, account-based product where each user has a private workspace.
 
-- Create tasks
-- View all tasks
-- Toggle task status between `Pending` and `Completed`
-- Delete tasks
-- Search tasks by title or description
-- Filter tasks by status
-- Live completion stats and progress indicator
+## Why This Project Is Resume-Ready
+
+- Implemented end-to-end JWT authentication with protected API routes.
+- Enforced user-level data isolation so users only access their own tasks.
+- Added priority management, due dates, server-side filtering, sorting, and pagination.
+- Built a polished responsive frontend with account flows, session persistence, and real-time dashboard stats.
+- Hardened backend with security middleware (`helmet`, rate limiting), structured error responses, and environment-based configuration.
+- Documented local development and production deployment for Netlify + Render workflows.
+
+## Core Features
+
+### Authentication and Access Control
+- User registration and login
+- Password hashing with `bcryptjs`
+- JWT-based stateless auth
+- Persistent login session in frontend
+- `GET /auth/me` profile endpoint
+
+### Task Management
+- Create, list, update, and delete tasks
+- Fields: title, description, status, priority, due date
+- Task status workflow: `Pending` <-> `Completed`
+- Task privacy per authenticated user
+
+### Product Experience
+- Dedicated signup/login experience
+- Search by title/description
+- Filter by status and priority
+- Sort by newest, oldest, due soon, or priority
+- Pagination controls
+- Completion metrics, high-priority count, overdue count
 
 ## Tech Stack
+
+### Frontend
+- React 18
+- Vite
+- Custom CSS (responsive + animated UI)
 
 ### Backend
 - Node.js
 - Express.js
-- MongoDB (Mongoose)
+- MongoDB + Mongoose
+- JWT (`jsonwebtoken`)
+- Password hashing (`bcryptjs`)
+- Security middleware (`helmet`, `express-rate-limit`)
+- Logging (`morgan`)
 
-### Frontend
-- React
-- Vite
-- Custom CSS
-
-## REST API Endpoints
-
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| POST | `/api/v1/tasks` | Create a new task |
-| GET | `/api/v1/tasks` | Get all tasks |
-| PUT | `/api/v1/tasks/:id` | Update a task |
-| DELETE | `/api/v1/tasks/:id` | Delete a task |
+### Deployment
+- Netlify (frontend)
+- Render or any Node host (backend)
+- MongoDB Atlas (database)
 
 ## Project Structure
 
@@ -39,59 +63,142 @@ Task management app with a Node.js + Express + MongoDB backend and a modern Reac
 task-management-system/
 |-- backend/
 |   |-- controllers/
+|   |   |-- authController.js
+|   |   `-- taskController.js
+|   |-- middlewares/
+|   |   `-- authMiddleware.js
 |   |-- models/
+|   |   |-- Task.js
+|   |   `-- User.js
 |   |-- routes/
-|   |-- server.js
-|   `-- package.json
+|   |   |-- authRoutes.js
+|   |   `-- taskRoutes.js
+|   |-- .env.example
+|   |-- package.json
+|   `-- server.js
 |-- frontend/
 |   |-- src/
 |   |   |-- App.jsx
 |   |   |-- main.jsx
 |   |   `-- styles.css
-|   |-- index.html
-|   |-- vite.config.js
-|   `-- package.json
+|   |-- .env.example
+|   |-- package.json
+|   `-- vite.config.js
+|-- netlify.toml
 `-- README.md
 ```
 
-## How To Run Locally
+## API Overview
 
-### Prerequisites
-- Node.js installed
-- MongoDB running
+Base URL: `/api/v1`
 
-### 1. Start Backend
+### Auth Routes
+
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/auth/register` | Register new user |
+| POST | `/auth/login` | Login user |
+| GET | `/auth/me` | Get current user profile (protected) |
+
+### Task Routes (Protected)
+
+| Method | Endpoint | Description |
+|---|---|---|
+| POST | `/tasks` | Create task |
+| GET | `/tasks` | List tasks (supports filtering, sorting, pagination) |
+| PUT | `/tasks/:id` | Update task |
+| DELETE | `/tasks/:id` | Delete task |
+
+### Query Params for `GET /tasks`
+
+- `status=Pending|Completed`
+- `priority=Low|Medium|High`
+- `search=<text>`
+- `sort=newest|oldest|dueSoon|priority`
+- `page=<number>`
+- `limit=<number>`
+
+## Local Development
+
+## 1) Backend Setup
 
 ```bash
 cd backend
 npm install
-npm start
+copy .env.example .env
 ```
 
-Backend runs on `http://localhost:5001` by default.
+Fill `backend/.env`:
 
-### 2. Start Frontend
+```env
+PORT=5001
+MONGODB_URI=your_mongodb_connection_string
+JWT_SECRET=your_long_random_secret
+JWT_EXPIRES_IN=7d
+CLIENT_URL=http://localhost:5173
+```
+
+Run backend:
+
+```bash
+npm run dev
+```
+
+## 2) Frontend Setup
 
 ```bash
 cd frontend
 npm install
+copy .env.example .env
+```
+
+Set frontend API URL (local backend):
+
+```env
+VITE_API_BASE_URL=http://localhost:5001/api/v1
+```
+
+Run frontend:
+
+```bash
 npm run dev
 ```
 
-Frontend runs on `http://localhost:5173`.
+App runs at `http://localhost:5173`.
 
-## Frontend API Configuration
+## Deployment Guide
 
-By default, frontend requests use `/api/v1` and Vite proxies them to `http://localhost:5001` in development.
+### Backend (Render example)
+1. Deploy `backend/` as a Node web service.
+2. Add environment variables from `backend/.env.example`.
+3. Set `CLIENT_URL` to your Netlify domain.
 
-If you want to connect to a different backend URL:
+### Frontend (Netlify)
+This repository already includes `netlify.toml`:
 
-1. Create `.env` inside `frontend/`
-2. Add:
+- Base directory: `frontend`
+- Build command: `npm run build`
+- Publish directory: `dist`
 
-```bash
+Optional environment variable:
+
+```env
 VITE_API_BASE_URL=https://your-backend-domain/api/v1
 ```
+
+## Security Notes
+
+- Passwords are never stored in plain text.
+- Task routes require a valid Bearer token.
+- API enforces account-level data scoping.
+- Security middleware enabled: `helmet`, CORS checks, request rate limiting.
+
+## Future Scope
+
+- Refresh tokens and secure cookie auth option
+- Team workspaces and shared boards
+- Activity audit logs
+- Unit/integration tests with CI pipeline
 
 ## Author
 
