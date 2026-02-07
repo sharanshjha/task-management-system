@@ -1,152 +1,231 @@
-// Controller for handling task operations
-// backend logic by Sharansh Jha
-// simple implementation for understanding CRUD
+const Task = require("../models/Task");
 
-const Task = require('../models/Task');
+const ALLOWED_STATUS = new Set(["Pending", "Completed"]);
+const ALLOWED_PRIORITY = new Set(["Low", "Medium", "High"]);
 
-// REST API to create a new task
-// using POST method as per REST principles
+const escapeRegex = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const parseDueDate = (value) => {
+  if (!value) {
+    return null;
+  }
+
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+};
+
 const createTask = async (req, res) => {
-    try {
-        // getting data from request body
-        const { title, description } = req.body;
+  try {
+    const title = (req.body.title || "").trim();
+    const description = (req.body.description || "").trim();
+    const priority = req.body.priority || "Medium";
+    const dueDate = parseDueDate(req.body.dueDate);
 
-        // basic validation
-        if (!title || !description) {
-            return res.status(400).json({
-                success: false,
-                message: 'Title and description are required'
-            });
-        }
-
-        // creating new task object
-        const newTask = new Task({
-            title: title,
-            description: description,
-            status: 'Pending'
-        });
-
-        // saving task to database
-        const savedTask = await newTask.save();
-
-        // sending response with 201 status code (created)
-        res.status(201).json({
-            success: true,
-            message: 'Task created successfully',
-            data: savedTask
-        });
-
-    } catch (error) {
-        // handling errors
-        res.status(500).json({
-            success: false,
-            message: 'Error creating task',
-            error: error.message
-        });
+    if (!title || !description) {
+      return res.status(400).json({
+        success: false,
+        message: "Title and description are required",
+      });
     }
+
+    if (!ALLOWED_PRIORITY.has(priority)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid priority value",
+      });
+    }
+
+    const task = await Task.create({
+      title,
+      description,
+      status: "Pending",
+      priority,
+      dueDate,
+      user: req.user._id,
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: "Task created successfully",
+      data: task,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Error creating task",
+      error: error.message,
+    });
+  }
 };
 
-// REST API to get all tasks
-// using GET method
 const getAllTasks = async (req, res) => {
-    try {
-        // first we get all tasks from database
-        const tasks = await Task.find();
+  try {
+    const filter = { user: req.user._id };
+    const { status, priority, search, sort = "newest" } = req.query;
 
-        // then we send them as JSON response
-        res.status(200).json({
-            success: true,
-            count: tasks.length,
-            data: tasks
-        });
-
-    } catch (error) {
-        res.status(500).json({
-            success: false,
-            message: 'Error fetching tasks',
-            error: error.message
-        });
+    if (status && ALLOWED_STATUS.has(status)) {
+      filter.status = status;
     }
+
+    if (priority && ALLOWED_PRIORITY.has(priority)) {
+      filter.priority = priority;
+    }
+
+    if (search) {
+      const regex = new RegExp(escapeRegex(search.trim()), "i");
+      filter.$or = [{ title: regex }, { description: regex }];
+    }
+
+    const page = Math.max(parseInt(req.query.page || "1", 10), 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit || "50", 10), 1), 100);
+    const skip = (page - 1) * limit;
+
+    const sortOptions = {
+      newest: { createdAt: -1 },
+      oldest: { createdAt: 1 },
+      dueSoon: { dueDate: 1, createdAt: -1 },
+    };
+
+    const sortBy = sortOptions[sort] || sortOptions.newest;
+    const totalPromise = Task.countDocuments(filter);
+    const tasksPromise =
+      sort === "priority"
+        ? Task.aggregate([
+            { $match: filter },
+            {
+              $addFields: {
+                priorityRank: {
+                  $switch: {
+                    branches: [
+                      { case: { $eq: ["$priority", "High"] }, then: 3 },
+                      { case: { $eq: ["$priority", "Medium"] }, then: 2 },
+                    ],
+                    default: 1,
+                  },
+                },
+              },
+            },
+            { $sort: { priorityRank: -1, createdAt: -1 } },
+            { $skip: skip },
+            { $limit: limit },
+            { $project: { priorityRank: 0 } },
+          ])
+        : Task.find(filter).sort(sortBy).skip(skip).limit(limit);
+
+    const [tasks, total] = await Promise.all([tasksPromise, totalPromise]);
+
+    return res.status(200).json({
+      success: true,
+      count: tasks.length,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit) || 1,
+      },
+      data: tasks,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Error fetching tasks",
+      error: error.message,
+    });
+  }
 };
 
-// REST API to update a task
-// using PUT method
 const updateTask = async (req, res) => {
-    try {
-        // getting task id from URL parameters
-        const taskId = req.params.id;
+  try {
+    const task = await Task.findOne({
+      _id: req.params.id,
+      user: req.user._id,
+    });
 
-        // getting updated data from request body
-        const { title, description, status } = req.body;
-
-        // finding task by id and updating it
-        const updatedTask = await Task.findByIdAndUpdate(
-            taskId,
-            { title, description, status },
-            { new: true }  // this returns the updated document
-        );
-
-        // if task not found
-        if (!updatedTask) {
-            return res.status(404).json({
-                success: false,
-                message: 'Task not found'
-            });
-        }
-
-        // sending success response
-        res.status(200).json({
-            success: true,
-            message: 'Task updated successfully',
-            data: updatedTask
-        });
-
-    } catch (error) {
-        res.status(500).json({
-            success: false,
-            message: 'Error updating task',
-            error: error.message
-        });
+    if (!task) {
+      return res.status(404).json({
+        success: false,
+        message: "Task not found",
+      });
     }
+
+    if (typeof req.body.title === "string") {
+      task.title = req.body.title.trim();
+    }
+
+    if (typeof req.body.description === "string") {
+      task.description = req.body.description.trim();
+    }
+
+    if (typeof req.body.status === "string") {
+      if (!ALLOWED_STATUS.has(req.body.status)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid status value",
+        });
+      }
+      task.status = req.body.status;
+    }
+
+    if (typeof req.body.priority === "string") {
+      if (!ALLOWED_PRIORITY.has(req.body.priority)) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid priority value",
+        });
+      }
+      task.priority = req.body.priority;
+    }
+
+    if (req.body.dueDate !== undefined) {
+      task.dueDate = parseDueDate(req.body.dueDate);
+    }
+
+    const updatedTask = await task.save();
+
+    return res.status(200).json({
+      success: true,
+      message: "Task updated successfully",
+      data: updatedTask,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Error updating task",
+      error: error.message,
+    });
+  }
 };
 
-// REST API to delete a task
-// using DELETE method
 const deleteTask = async (req, res) => {
-    try {
-        // getting task id from URL
-        const taskId = req.params.id;
+  try {
+    const task = await Task.findOneAndDelete({
+      _id: req.params.id,
+      user: req.user._id,
+    });
 
-        // finding and deleting task
-        const deletedTask = await Task.findByIdAndDelete(taskId);
-
-        // checking if task exists
-        if (!deletedTask) {
-            return res.status(404).json({
-                success: false,
-                message: 'Task not found'
-            });
-        }
-
-        // sending success response
-        res.status(200).json({
-            success: true,
-            message: 'Task deleted successfully'
-        });
-
-    } catch (error) {
-        res.status(500).json({
-            success: false,
-            message: 'Error deleting task',
-            error: error.message
-        });
+    if (!task) {
+      return res.status(404).json({
+        success: false,
+        message: "Task not found",
+      });
     }
+
+    return res.status(200).json({
+      success: true,
+      message: "Task deleted successfully",
+    });
+  } catch (error) {
+    return res.status(500).json({
+      success: false,
+      message: "Error deleting task",
+      error: error.message,
+    });
+  }
 };
 
-// exporting all controller functions
 module.exports = {
-    createTask,
-    getAllTasks,
-    updateTask,
-    deleteTask
+  createTask,
+  getAllTasks,
+  updateTask,
+  deleteTask,
 };

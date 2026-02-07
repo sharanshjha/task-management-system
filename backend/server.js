@@ -1,53 +1,99 @@
-// Main server file for Task Management System
-// REST API backend created by Sharansh Jha
-// written while learning Node.js, Express and MongoDB
+const express = require("express");
+const mongoose = require("mongoose");
+const cors = require("cors");
+const dotenv = require("dotenv");
+const helmet = require("helmet");
+const morgan = require("morgan");
+const rateLimit = require("express-rate-limit");
 
-const express = require('express');
-const mongoose = require('mongoose');
-const cors = require('cors');
+const taskRoutes = require("./routes/taskRoutes");
+const authRoutes = require("./routes/authRoutes");
 
-// importing routes
-const taskRoutes = require('./routes/taskRoutes');
+dotenv.config();
 
-// creating express app
 const app = express();
-
-// middleware to parse JSON data
-app.use(express.json());
-
-// middleware to enable CORS (so frontend can access backend)
-app.use(cors());
-
-// MongoDB Atlas connection string
-// Using environment variable in production, fallback to hardcoded for simplicity in local
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb+srv://Sharansh:password69@cluster0.clwhtys.mongodb.net/taskManagementDB?retryWrites=true&w=majority';
-
-// connecting to MongoDB database
-mongoose.connect(MONGODB_URI)
-    .then(() => {
-        console.log('Connected to MongoDB successfully');
-    })
-    .catch((error) => {
-        console.log('Error connecting to MongoDB:', error);
-    });
-
-// using task routes with /api/v1 prefix
-app.use('/api/v1', taskRoutes);
-
-// simple route to check if server is running
-app.get('/', (req, res) => {
-    res.json({
-        message: 'Task Management REST API',
-        author: 'Sharansh Jha',
-        version: '1.0.0'
-    });
-});
-
-// setting port number
 const PORT = process.env.PORT || 5001;
+const MONGODB_URI = process.env.MONGODB_URI;
 
-// starting the server
-app.listen(PORT, () => {
-    console.log(`Server is running on port ${PORT}`);
-    console.log(`REST API available at http://localhost:${PORT}/api/v1`);
+if (!MONGODB_URI) {
+  throw new Error("Missing required environment variable: MONGODB_URI");
+}
+
+if (!process.env.JWT_SECRET) {
+  throw new Error("Missing required environment variable: JWT_SECRET");
+}
+
+const allowedOrigins = (process.env.CLIENT_URL || "")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.length === 0 || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(new Error("CORS policy does not allow this origin"));
+    },
+  })
+);
+
+app.use(helmet());
+app.use(
+  rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 300,
+    standardHeaders: true,
+    legacyHeaders: false,
+  })
+);
+app.use(morgan("dev"));
+app.use(express.json({ limit: "1mb" }));
+
+app.get("/", (req, res) => {
+  res.status(200).json({
+    success: true,
+    message: "Task Management API is running",
+    docsHint: "Use /api/v1/auth and /api/v1/tasks",
+  });
 });
+
+app.get("/api/v1/health", (req, res) => {
+  res.status(200).json({
+    success: true,
+    uptime: process.uptime(),
+    timestamp: new Date().toISOString(),
+  });
+});
+
+app.use("/api/v1/auth", authRoutes);
+app.use("/api/v1", taskRoutes);
+
+app.use((error, req, res, next) => {
+  if (error.message.includes("CORS")) {
+    return res.status(403).json({
+      success: false,
+      message: "CORS blocked this request origin",
+    });
+  }
+
+  return res.status(500).json({
+    success: false,
+    message: "Unexpected server error",
+  });
+});
+
+mongoose
+  .connect(MONGODB_URI)
+  .then(() => {
+    app.listen(PORT, () => {
+      console.log(`Server is running on port ${PORT}`);
+      console.log(`REST API available at http://localhost:${PORT}/api/v1`);
+    });
+  })
+  .catch((error) => {
+    console.error("Error connecting to MongoDB:", error.message);
+    process.exit(1);
+  });

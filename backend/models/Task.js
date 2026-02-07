@@ -1,29 +1,45 @@
-// Task model using Mongoose
-// written while learning REST APIs and MongoDB
-// created by Sharansh Jha
+const mongoose = require("mongoose");
 
-const mongoose = require('mongoose');
-
-// defining schema for task
-const taskSchema = new mongoose.Schema({
+const taskSchema = new mongoose.Schema(
+  {
     title: {
-        type: String,
-        required: true
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 120,
     },
     description: {
-        type: String,
-        required: true
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 1000,
     },
     status: {
-        type: String,
-        enum: ['Pending', 'Completed'],
-        default: 'Pending'
-    }
-}, {
-    timestamps: true  // this will add createdAt and updatedAt fields
-});
+      type: String,
+      enum: ["Pending", "Completed"],
+      default: "Pending",
+    },
+    priority: {
+      type: String,
+      enum: ["Low", "Medium", "High"],
+      default: "Medium",
+    },
+    dueDate: {
+      type: Date,
+      default: null,
+    },
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      required: true,
+      index: true,
+    },
+  },
+  {
+    timestamps: true,
+  }
+);
 
-// creating model from schema
-const Task = mongoose.model('Task', taskSchema);
+taskSchema.index({ user: 1, createdAt: -1 });
 
-module.exports = Task;
+module.exports = mongoose.model("Task", taskSchema);
