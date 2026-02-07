@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api/v1";
+const DEFAULT_PRODUCTION_API = "https://task-management-system-sh4i.onrender.com/api/v1";
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || (import.meta.env.DEV ? "/api/v1" : DEFAULT_PRODUCTION_API);
 const STATUS_FILTERS = ["All", "Pending", "Completed"];
 const INITIAL_FORM = { title: "", description: "" };
 
